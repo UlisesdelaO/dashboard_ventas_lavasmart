@@ -569,22 +569,33 @@
         .exportToCSV(filterValue, startDate, endDate, filterType);
     }
 
-    // Función para navegar en iframe usando replace para evitar pantalla en blanco
+    // Función para navegar en iframe - maneja tanto iframe como ventana normal
     function navigateToPage(page) {
       try {
-        var currentUrl = window.location.href;
-        var baseUrl = currentUrl.split('?')[0]; // Obtener URL sin parámetros
+        // Detectar si estamos en un iframe
+        var isInIframe = window.self !== window.top;
+        var targetWindow = isInIframe ? window.top : window;
+        
+        // Obtener URL base
+        var currentUrl = targetWindow.location.href;
+        var baseUrl = currentUrl.split('?')[0];
         var newUrl = page === 'dashboard' ? baseUrl + '?page=dashboard' : baseUrl;
         
-        // Usar replace en lugar de href para evitar problemas en iframe
-        window.location.replace(newUrl);
+        // Usar replace para evitar problemas en iframe
+        targetWindow.location.replace(newUrl);
       } catch (e) {
         console.error('Error en navegación:', e);
-        // Fallback: recargar con parámetros
-        if (page === 'dashboard') {
-          window.location.search = '?page=dashboard';
-        } else {
-          window.location.search = '';
+        // Fallback: intentar con window.location directamente
+        try {
+          if (page === 'dashboard') {
+            window.location.search = '?page=dashboard';
+          } else {
+            window.location.search = '';
+          }
+        } catch (e2) {
+          console.error('Error en fallback:', e2);
+          // Último recurso: recargar página completa
+          window.location.reload();
         }
       }
     }
