@@ -313,6 +313,75 @@ function getDailySalesData() {
 }
 
 /**
+ * getDailyBreakdown: desglose detallado por día (últimos 30 días)
+ */
+function getDailyBreakdown() {
+  try {
+    var data = getRawData();
+    var dailyMap = {};
+    
+    var now = new Date();
+    var thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    var thirtyDaysAgoKey = Utilities.formatDate(thirtyDaysAgo, CONFIG.TIMEZONE, CONFIG.DATE_FORMAT);
+
+    data.forEach(function(row) {
+      if (!isValidRow(row)) return;
+      var dateKey = getDateKey(row[4]);
+      if (!dateKey || dateKey < thirtyDaysAgoKey) return;
+      
+      var revenue = parseFloat(row[11]) || 0;
+      var tips = parseFloat(row[9]) || 0;
+      var payStatus = (row[19] || '').toString().toLowerCase();
+      var isPaid = payStatus === 'pagado' || payStatus === 'cobrado';
+
+      if (!dailyMap[dateKey]) {
+        dailyMap[dateKey] = { revenue: 0, paid: 0, pending: 0, tips: 0, count: 0 };
+      }
+      dailyMap[dateKey].revenue += revenue;
+      dailyMap[dateKey].tips += tips;
+      dailyMap[dateKey].count++;
+      if (isPaid) dailyMap[dateKey].paid += revenue;
+      else dailyMap[dateKey].pending += revenue;
+    });
+
+    // Convertir a array ordenado por fecha descendente
+    var sortedDates = Object.keys(dailyMap).sort().reverse();
+    var result = [];
+    sortedDates.forEach(function(dateKey) {
+      var d = dailyMap[dateKey];
+      result.push({
+        date: dateKey,
+        dateFormatted: formatDateDisplay(dateKey),
+        revenue: d.revenue,
+        paid: d.paid,
+        pending: d.pending,
+        tips: d.tips,
+        count: d.count,
+        paidPct: d.revenue > 0 ? Math.round((d.paid / d.revenue) * 100) : 0
+      });
+    });
+    
+    return result;
+  } catch (e) {
+    Logger.log('Error en getDailyBreakdown: ' + e.message);
+    return [];
+  }
+}
+
+/**
+ * Formatea fecha YYYY-MM-DD a formato legible
+ */
+function formatDateDisplay(dateKey) {
+  if (!dateKey) return '';
+  var parts = dateKey.split('-');
+  if (parts.length !== 3) return dateKey;
+  var months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+  var days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+  var date = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+  return days[date.getDay()] + ' ' + parseInt(parts[2]) + ' ' + months[parseInt(parts[1]) - 1];
+}
+
+/**
  * getPaymentMethodData: datos para gráfica de métodos de pago
  */
 function getPaymentMethodData() {

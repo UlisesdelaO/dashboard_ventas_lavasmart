@@ -62,7 +62,7 @@
     google.charts.setOnLoadCallback(initDashboard);
 
     var chartsLoaded = 0;
-    var totalCharts = 6;
+    var totalCharts = 7;
 
     function initDashboard() {
       $("#loader").removeClass("hidden");
@@ -70,6 +70,9 @@
       
       // Resumen financiero
       google.script.run.withSuccessHandler(showFinancialSummary).withFailureHandler(handleError).getFinancialSummary();
+      
+      // Desglose diario
+      google.script.run.withSuccessHandler(showDailyBreakdown).withFailureHandler(handleError).getDailyBreakdown();
       
       // Gráficas
       google.script.run.withSuccessHandler(drawMonthlyTrendChart).withFailureHandler(handleError).getMonthlyTrendData();
@@ -135,6 +138,38 @@
       var growthClass = growth >= 0 ? 'text-green-600' : 'text-red-600';
       var growthIcon = growth >= 0 ? 'fa-arrow-up' : 'fa-arrow-down';
       $("#month-growth").html('<i class="fas ' + growthIcon + ' mr-1"></i>' + Math.abs(growth) + '% vs mes anterior').addClass(growthClass);
+    }
+
+    function showDailyBreakdown(data) {
+      if (!data || data.length === 0) {
+        $("#daily-table-body").html('<tr><td colspan="7" class="text-center py-4 text-gray-500">Sin datos</td></tr>');
+        chartsLoaded++; checkAllChartsLoaded();
+        return;
+      }
+      
+      var html = '';
+      data.forEach(function(day, idx) {
+        var rowClass = idx === 0 ? 'bg-lava-50' : (idx % 2 === 0 ? 'bg-white' : 'bg-gray-50');
+        var pendingClass = day.pending > 0 ? 'text-amber-600 font-semibold' : 'text-gray-400';
+        var paidClass = day.paid > 0 ? 'text-green-600' : 'text-gray-400';
+        
+        html += '<tr class="' + rowClass + ' hover:bg-lava-100 transition-colors">';
+        html += '<td class="px-3 py-2 text-sm font-medium text-lava-800">' + day.dateFormatted + '</td>';
+        html += '<td class="px-3 py-2 text-sm text-center text-gray-600">' + day.count + '</td>';
+        html += '<td class="px-3 py-2 text-sm font-semibold text-lava-700 text-right">' + formatMoneyFull(day.revenue) + '</td>';
+        html += '<td class="px-3 py-2 text-sm text-right ' + paidClass + '">' + formatMoneyFull(day.paid) + '</td>';
+        html += '<td class="px-3 py-2 text-sm text-right ' + pendingClass + '">' + formatMoneyFull(day.pending) + '</td>';
+        html += '<td class="px-3 py-2 text-sm text-right text-cyan-600">' + formatMoneyFull(day.tips) + '</td>';
+        html += '<td class="px-3 py-2 text-center"><div class="w-full bg-gray-200 rounded-full h-1.5"><div class="h-1.5 rounded-full ' + (day.paidPct >= 80 ? 'bg-green-500' : day.paidPct >= 50 ? 'bg-amber-500' : 'bg-red-500') + '" style="width: ' + day.paidPct + '%"></div></div><span class="text-xs text-gray-500">' + day.paidPct + '%</span></td>';
+        html += '</tr>';
+      });
+      
+      $("#daily-table-body").html(html);
+      chartsLoaded++; checkAllChartsLoaded();
+    }
+
+    function formatMoneyFull(n) {
+      return '$' + n.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
     }
 
     function drawMonthlyTrendChart(dataArray) {
@@ -368,6 +403,31 @@
           <div class="flex justify-between"><span class="text-xs text-gray-500">Pendiente</span><span id="sum-all-pending" class="font-semibold text-amber-600">$0</span></div>
           <div class="flex justify-between"><span class="text-xs text-gray-500">Propinas</span><span id="sum-all-tips" class="font-semibold text-cyan-600">$0</span></div>
         </div>
+      </div>
+    </div>
+
+    <!-- Desglose Diario -->
+    <div class="chart-container rounded-xl shadow-lg p-4 mb-6 animate-fade-in" style="animation-delay: 0.28s">
+      <h3 class="text-sm font-semibold text-lava-800 mb-3 flex items-center gap-2">
+        <i class="fas fa-calendar-alt text-lava-500"></i>Desglose por Día (Últimos 30 días)
+      </h3>
+      <div class="overflow-x-auto max-h-[350px] overflow-y-auto">
+        <table class="w-full text-left">
+          <thead class="sticky top-0 bg-gradient-to-r from-lava-600 to-lava-500 text-white">
+            <tr>
+              <th class="px-3 py-2 text-xs font-semibold uppercase">Fecha</th>
+              <th class="px-3 py-2 text-xs font-semibold uppercase text-center">Servicios</th>
+              <th class="px-3 py-2 text-xs font-semibold uppercase text-right">Ingresos</th>
+              <th class="px-3 py-2 text-xs font-semibold uppercase text-right">Cobrado</th>
+              <th class="px-3 py-2 text-xs font-semibold uppercase text-right">Pendiente</th>
+              <th class="px-3 py-2 text-xs font-semibold uppercase text-right">Propinas</th>
+              <th class="px-3 py-2 text-xs font-semibold uppercase text-center">% Cobro</th>
+            </tr>
+          </thead>
+          <tbody id="daily-table-body">
+            <tr><td colspan="7" class="text-center py-4 text-gray-500">Cargando...</td></tr>
+          </tbody>
+        </table>
       </div>
     </div>
 
