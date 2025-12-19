@@ -476,3 +476,461 @@ function getServiceStatusData() {
     return [["Estado", "Cantidad"]];
   }
 }
+
+/**
+ * getFinancialKpis: KPIs financieros completos
+ */
+function getFinancialKpis(filterValue, startDate, endDate, filterType, paymentMethod, paymentStatus, vendor) {
+  try {
+    var data = getRawData();
+    if (!data.length) {
+      return getEmptyFinancialKpis();
+    }
+
+    var stats = {
+      totalRecords: 0,
+      totalRevenue: 0,
+      totalPaid: 0,
+      totalPending: 0,
+      totalTips: 0,
+      totalAdditional: 0,
+      totalBase: 0,
+      pendingCount: 0,
+      paidCount: 0,
+      noPaymentInfoCount: 0
+    };
+
+    data.forEach(function(row) {
+      if (!isValidRow(row)) return;
+      if (!isWithinDateRange(row[4], startDate, endDate, filterType)) return;
+      if (filterType !== 'all' && !matchesSearchText(row, filterValue)) return;
+      
+      // Filtros adicionales
+      if (paymentMethod && paymentMethod !== 'all') {
+        var rowMethod = (row[18] || '').toString().toLowerCase();
+        if (rowMethod !== paymentMethod.toLowerCase()) return;
+      }
+      if (paymentStatus && paymentStatus !== 'all') {
+        var rowStatus = (row[19] || '').toString().toLowerCase();
+        if (paymentStatus === 'pending' && rowStatus !== 'pendiente' && rowStatus !== 'por pagar') return;
+        if (paymentStatus === 'paid' && rowStatus !== 'pagado' && rowStatus !== 'cobrado') return;
+        if (paymentStatus === 'none' && rowStatus !== '') return;
+      }
+      if (vendor && vendor !== 'all') {
+        var rowVendor = (row[35] || '').toString().toLowerCase();
+        if (rowVendor !== vendor.toLowerCase()) return;
+      }
+
+      stats.totalRecords++;
+      
+      var revenue = parseFloat(row[11]) || 0;
+      var tips = parseFloat(row[9]) || 0;
+      var additional = parseFloat(row[8]) || 0;
+      var base = parseFloat(row[16]) || 0;
+      
+      stats.totalRevenue += revenue;
+      stats.totalTips += tips;
+      stats.totalAdditional += additional;
+      stats.totalBase += base;
+      
+      // Estado de pago
+      var payStatus = (row[19] || '').toString().toLowerCase();
+      if (payStatus === 'pagado' || payStatus === 'cobrado') {
+        stats.paidCount++;
+        stats.totalPaid += revenue;
+      } else if (payStatus === 'pendiente' || payStatus === 'por pagar') {
+        stats.pendingCount++;
+        stats.totalPending += revenue;
+      } else {
+        stats.noPaymentInfoCount++;
+        stats.totalPending += revenue; // Sin info = pendiente
+      }
+    });
+
+    return {
+      totalRecords: stats.totalRecords,
+      totalRevenue: stats.totalRevenue,
+      avgRevenue: stats.totalRecords > 0 ? stats.totalRevenue / stats.totalRecords : 0,
+      totalPaid: stats.totalPaid,
+      totalPending: stats.totalPending,
+      totalTips: stats.totalTips,
+      totalAdditional: stats.totalAdditional,
+      totalBase: stats.totalBase,
+      pendingCount: stats.pendingCount,
+      paidCount: stats.paidCount,
+      noPaymentInfoCount: stats.noPaymentInfoCount,
+      paidPercentage: stats.totalRecords > 0 ? (stats.paidCount / stats.totalRecords) * 100 : 0
+    };
+  } catch (e) {
+    Logger.log('Error en getFinancialKpis: ' + e.message);
+    return getEmptyFinancialKpis();
+  }
+}
+
+function getEmptyFinancialKpis() {
+  return {
+    totalRecords: 0, totalRevenue: 0, avgRevenue: 0, totalPaid: 0, totalPending: 0,
+    totalTips: 0, totalAdditional: 0, totalBase: 0, pendingCount: 0, paidCount: 0,
+    noPaymentInfoCount: 0, paidPercentage: 0
+  };
+}
+
+/**
+ * getFilterOptions: obtiene opciones para filtros dropdown
+ */
+function getFilterOptions() {
+  try {
+    var data = getRawData();
+    var paymentMethods = {};
+    var paymentStatuses = {};
+    var vendors = {};
+    var saleTypes = {};
+
+    data.forEach(function(row) {
+      if (!isValidRow(row)) return;
+      
+      var method = row[18] || '';
+      var status = row[19] || '';
+      var vendor = row[35] || '';
+      var saleType = row[17] || '';
+      
+      if (method) paymentMethods[method] = true;
+      if (status) paymentStatuses[status] = true;
+      if (vendor) vendors[vendor] = true;
+      if (saleType) saleTypes[saleType] = true;
+    });
+
+    return {
+      paymentMethods: Object.keys(paymentMethods).sort(),
+      paymentStatuses: Object.keys(paymentStatuses).sort(),
+      vendors: Object.keys(vendors).sort(),
+      saleTypes: Object.keys(saleTypes).sort()
+    };
+  } catch (e) {
+    Logger.log('Error en getFilterOptions: ' + e.message);
+    return { paymentMethods: [], paymentStatuses: [], vendors: [], saleTypes: [] };
+  }
+}
+
+/**
+ * getMonthlyTrendData: tendencia mensual de ingresos
+ */
+function getMonthlyTrendData() {
+  try {
+    var data = getRawData();
+    var monthlyMap = {};
+
+    data.forEach(function(row) {
+      if (!isValidRow(row)) return;
+      var dateKey = getDateKey(row[4]);
+      if (!dateKey) return;
+      
+      var monthKey = dateKey.substring(0, 7); // YYYY-MM
+      var revenue = parseFloat(row[11]) || 0;
+      var paid = 0;
+      var pending = 0;
+      
+      var payStatus = (row[19] || '').toString().toLowerCase();
+      if (payStatus === 'pagado' || payStatus === 'cobrado') {
+        paid = revenue;
+      } else {
+        pending = revenue;
+      }
+
+      if (!monthlyMap[monthKey]) {
+        monthlyMap[monthKey] = { revenue: 0, paid: 0, pending: 0, count: 0 };
+      }
+      monthlyMap[monthKey].revenue += revenue;
+      monthlyMap[monthKey].paid += paid;
+      monthlyMap[monthKey].pending += pending;
+      monthlyMap[monthKey].count++;
+    });
+
+    var sortedMonths = Object.keys(monthlyMap).sort();
+    var result = [["Mes", "Ingresos", "Cobrado", "Pendiente"]];
+    sortedMonths.forEach(function(m) {
+      result.push([m, monthlyMap[m].revenue, monthlyMap[m].paid, monthlyMap[m].pending]);
+    });
+    return result;
+  } catch (e) {
+    Logger.log('Error en getMonthlyTrendData: ' + e.message);
+    return [["Mes", "Ingresos", "Cobrado", "Pendiente"]];
+  }
+}
+
+/**
+ * getPaymentStatusSummary: resumen de estados de pago
+ */
+function getPaymentStatusSummary() {
+  try {
+    var data = getRawData();
+    var statusMap = {};
+
+    data.forEach(function(row) {
+      if (!isValidRow(row)) return;
+      var status = row[19] || 'Sin registrar';
+      var revenue = parseFloat(row[11]) || 0;
+
+      if (!statusMap[status]) {
+        statusMap[status] = { count: 0, amount: 0 };
+      }
+      statusMap[status].count++;
+      statusMap[status].amount += revenue;
+    });
+
+    var result = [["Estado de Pago", "Cantidad", "Monto"]];
+    Object.keys(statusMap).forEach(function(status) {
+      result.push([status, statusMap[status].count, statusMap[status].amount]);
+    });
+    return result;
+  } catch (e) {
+    Logger.log('Error en getPaymentStatusSummary: ' + e.message);
+    return [["Estado de Pago", "Cantidad", "Monto"]];
+  }
+}
+
+/**
+ * getSaleTypeData: datos por tipo de venta
+ */
+function getSaleTypeData() {
+  try {
+    var data = getRawData();
+    var typeMap = {};
+
+    data.forEach(function(row) {
+      if (!isValidRow(row)) return;
+      var saleType = row[17] || 'Sin especificar';
+      var revenue = parseFloat(row[11]) || 0;
+
+      if (!typeMap[saleType]) typeMap[saleType] = 0;
+      typeMap[saleType] += revenue;
+    });
+
+    var result = [["Tipo de Venta", "Monto"]];
+    Object.keys(typeMap).forEach(function(type) {
+      if (typeMap[type] > 0) {
+        result.push([type, typeMap[type]]);
+      }
+    });
+    return result;
+  } catch (e) {
+    Logger.log('Error en getSaleTypeData: ' + e.message);
+    return [["Tipo de Venta", "Monto"]];
+  }
+}
+
+/**
+ * getTopServicesData: top servicios más vendidos
+ */
+function getTopServicesData() {
+  try {
+    var data = getRawData();
+    var serviceMap = {};
+
+    data.forEach(function(row) {
+      if (!isValidRow(row)) return;
+      var services = (row[30] || '').toString();
+      var revenue = parseFloat(row[11]) || 0;
+      
+      // Separar servicios si hay múltiples
+      var serviceList = services.split(',');
+      serviceList.forEach(function(service) {
+        service = service.trim();
+        if (service) {
+          if (!serviceMap[service]) serviceMap[service] = { count: 0, revenue: 0 };
+          serviceMap[service].count++;
+          serviceMap[service].revenue += revenue / serviceList.length;
+        }
+      });
+    });
+
+    var result = [["Servicio", "Cantidad", "Ingresos"]];
+    var sorted = Object.keys(serviceMap).sort(function(a, b) {
+      return serviceMap[b].revenue - serviceMap[a].revenue;
+    });
+    sorted.slice(0, 10).forEach(function(service) {
+      result.push([service, serviceMap[service].count, serviceMap[service].revenue]);
+    });
+    return result;
+  } catch (e) {
+    Logger.log('Error en getTopServicesData: ' + e.message);
+    return [["Servicio", "Cantidad", "Ingresos"]];
+  }
+}
+
+/**
+ * getFinancialSummary: resumen financiero completo para dashboard
+ */
+function getFinancialSummary() {
+  try {
+    var data = getRawData();
+    
+    var summary = {
+      allTime: { revenue: 0, paid: 0, pending: 0, tips: 0, count: 0 },
+      thisMonth: { revenue: 0, paid: 0, pending: 0, tips: 0, count: 0 },
+      lastMonth: { revenue: 0, paid: 0, pending: 0, tips: 0, count: 0 },
+      thisWeek: { revenue: 0, paid: 0, pending: 0, tips: 0, count: 0 },
+      today: { revenue: 0, paid: 0, pending: 0, tips: 0, count: 0 }
+    };
+
+    var now = new Date();
+    var todayKey = Utilities.formatDate(now, CONFIG.TIMEZONE, CONFIG.DATE_FORMAT);
+    var thisMonthKey = todayKey.substring(0, 7);
+    
+    var lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    var lastMonthKey = Utilities.formatDate(lastMonth, CONFIG.TIMEZONE, 'yyyy-MM');
+    
+    var weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    var weekAgoKey = Utilities.formatDate(weekAgo, CONFIG.TIMEZONE, CONFIG.DATE_FORMAT);
+
+    data.forEach(function(row) {
+      if (!isValidRow(row)) return;
+      var dateKey = getDateKey(row[4]);
+      if (!dateKey) return;
+      
+      var revenue = parseFloat(row[11]) || 0;
+      var tips = parseFloat(row[9]) || 0;
+      var payStatus = (row[19] || '').toString().toLowerCase();
+      var isPaid = payStatus === 'pagado' || payStatus === 'cobrado';
+
+      // All time
+      summary.allTime.revenue += revenue;
+      summary.allTime.tips += tips;
+      summary.allTime.count++;
+      if (isPaid) summary.allTime.paid += revenue;
+      else summary.allTime.pending += revenue;
+
+      // This month
+      if (dateKey.substring(0, 7) === thisMonthKey) {
+        summary.thisMonth.revenue += revenue;
+        summary.thisMonth.tips += tips;
+        summary.thisMonth.count++;
+        if (isPaid) summary.thisMonth.paid += revenue;
+        else summary.thisMonth.pending += revenue;
+      }
+
+      // Last month
+      if (dateKey.substring(0, 7) === lastMonthKey) {
+        summary.lastMonth.revenue += revenue;
+        summary.lastMonth.tips += tips;
+        summary.lastMonth.count++;
+        if (isPaid) summary.lastMonth.paid += revenue;
+        else summary.lastMonth.pending += revenue;
+      }
+
+      // This week
+      if (dateKey >= weekAgoKey) {
+        summary.thisWeek.revenue += revenue;
+        summary.thisWeek.tips += tips;
+        summary.thisWeek.count++;
+        if (isPaid) summary.thisWeek.paid += revenue;
+        else summary.thisWeek.pending += revenue;
+      }
+
+      // Today
+      if (dateKey === todayKey) {
+        summary.today.revenue += revenue;
+        summary.today.tips += tips;
+        summary.today.count++;
+        if (isPaid) summary.today.paid += revenue;
+        else summary.today.pending += revenue;
+      }
+    });
+
+    return summary;
+  } catch (e) {
+    Logger.log('Error en getFinancialSummary: ' + e.message);
+    return {
+      allTime: { revenue: 0, paid: 0, pending: 0, tips: 0, count: 0 },
+      thisMonth: { revenue: 0, paid: 0, pending: 0, tips: 0, count: 0 },
+      lastMonth: { revenue: 0, paid: 0, pending: 0, tips: 0, count: 0 },
+      thisWeek: { revenue: 0, paid: 0, pending: 0, tips: 0, count: 0 },
+      today: { revenue: 0, paid: 0, pending: 0, tips: 0, count: 0 }
+    };
+  }
+}
+
+/**
+ * getAdvancedFilteredData: datos filtrados con filtros avanzados
+ */
+function getAdvancedFilteredData(filterValue, startDate, endDate, filterType, paymentMethod, paymentStatus, vendor) {
+  try {
+    var data = getRawData();
+    if (!data.length) return JSON.stringify([]);
+
+    var filtered = data.filter(function(row) {
+      if (!isValidRow(row)) return false;
+      if (!isWithinDateRange(row[4], startDate, endDate, filterType)) return false;
+      if (filterType !== 'all' && !matchesSearchText(row, filterValue)) return false;
+      
+      // Filtros adicionales
+      if (paymentMethod && paymentMethod !== 'all') {
+        var rowMethod = (row[18] || '').toString().toLowerCase();
+        if (rowMethod !== paymentMethod.toLowerCase()) return false;
+      }
+      if (paymentStatus && paymentStatus !== 'all') {
+        var rowStatus = (row[19] || '').toString().toLowerCase();
+        if (paymentStatus === 'pending') {
+          if (rowStatus !== 'pendiente' && rowStatus !== 'por pagar' && rowStatus !== '') return false;
+        } else if (paymentStatus === 'paid') {
+          if (rowStatus !== 'pagado' && rowStatus !== 'cobrado') return false;
+        }
+      }
+      if (vendor && vendor !== 'all') {
+        var rowVendor = (row[35] || '').toString().toLowerCase();
+        if (rowVendor !== vendor.toLowerCase()) return false;
+      }
+      
+      return true;
+    }).map(function(row) {
+      return [
+        row[3],                            // [0]  Folio
+        formatDate(row[4]),                // [1]  Fecha
+        row[5],                            // [2]  Cliente
+        row[29],                           // [3]  Teléfono
+        formatCurrency(row[7]),            // [4]  C. Cotizado
+        formatCurrency(row[8]),            // [5]  C. S. Adicionales
+        formatCurrency(row[9]),            // [6]  Propinas
+        formatCurrency(row[10]),           // [7]  Diferencia
+        formatCurrency(row[11]),           // [8]  Costo Total (Monto)
+        formatDate(row[12]),               // [9]  Fecha de Servicio
+        row[13],                           // [10] Folios Folio Físico
+        row[14],                           // [11] Carpeta de Evidencia
+        row[15],                           // [12] Folio de Venta
+        formatCurrency(row[16]),           // [13] Costo de Servicios Base
+        row[17],                           // [14] Tipo de Venta
+        row[18],                           // [15] Método de Pago
+        row[19],                           // [16] Estado de Pago
+        row[20],                           // [17] Banco
+        row[21],                           // [18] Terminación de Tarjeta
+        row[22],                           // [19] Concepto / Referencia en Banco
+        row[23],                           // [20] Unidad  
+        row[24],                           // [21] Técnico 1
+        row[25],                           // [22] Técnico 2
+        row[26],                           // [23] Persona Adicional
+        row[27],                           // [24] Cotización
+        row[28],                           // [25] Nombre del Cliente
+        row[29],                           // [26] Teléfono (duplicado)
+        row[30],                           // [27] Servicio(s)
+        row[31],                           // [28] Comentarios / Observaciones
+        row[32],                           // [29] Servicio No.
+        formatDate(row[33]),               // [30] Fecha (duplicado)
+        formatTime(row[34]),               // [31] Hora
+        row[35],                           // [32] Vendedor
+        row[36],                           // [33] Estado Servicio
+        row[37],                           // [34] Ubicación - Calle
+        row[38],                           // [35] Ubicación - Colonia
+        row[39],                           // [36] Ubicación - Código postal
+        row[40],                           // [37] Ubicación - Cuadrante
+        row[41],                           // [38] Ubicación - Unidad
+        row[42],                           // [39] Ubicación - Coordenadas
+        row[43]                            // [40] Referencias
+      ];
+    });
+
+    return JSON.stringify(filtered);
+  } catch (e) {
+    Logger.log('Error en getAdvancedFilteredData: ' + e.message);
+    return JSON.stringify([]);
+  }
+}
