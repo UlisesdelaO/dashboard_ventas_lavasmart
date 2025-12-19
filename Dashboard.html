@@ -339,6 +339,16 @@
       }
     });
 
+    // Función para navegar en iframe
+    function navigateToPage(page) {
+      var baseUrl = window.location.protocol + '//' + window.location.host + window.location.pathname;
+      if (page === 'dashboard') {
+        window.location.href = baseUrl + '?page=dashboard';
+      } else {
+        window.location.href = baseUrl;
+      }
+    }
+
     $(document).ready(function() {
       // Refresh button
       $("#btn-refresh").on("click", function() {
@@ -354,7 +364,7 @@
   <nav class="fixed top-0 left-0 w-full glass-card z-50 shadow-lg">
     <div class="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
       <!-- Logo -->
-      <a href="?" class="flex items-center gap-3 group">
+      <a href="javascript:void(0)" onclick="navigateToPage('')" class="flex items-center gap-3 group cursor-pointer">
         <div class="w-10 h-10 bg-gradient-to-br from-lava-500 to-lava-700 rounded-xl flex items-center justify-center shadow-lg group-hover:shadow-lava-500/30 transition-all">
           <i class="fas fa-tint text-white text-lg"></i>
         </div>
@@ -365,12 +375,12 @@
       
       <!-- Nav Links -->
       <div class="flex items-center gap-2">
-        <a href="?"
-           class="nav-link px-4 py-2 rounded-lg text-sm font-medium text-lava-700 hover:bg-lava-50 transition-all">
+        <a href="javascript:void(0)" onclick="navigateToPage('')"
+           class="nav-link px-4 py-2 rounded-lg text-sm font-medium text-lava-700 hover:bg-lava-50 transition-all cursor-pointer">
           <i class="fas fa-table mr-2"></i>Consulta
         </a>
-        <a href="?page=dashboard"
-           class="nav-link active px-4 py-2 rounded-lg text-sm font-medium text-white bg-gradient-to-r from-lava-600 to-lava-500 shadow-md">
+        <a href="javascript:void(0)" onclick="navigateToPage('dashboard')"
+           class="nav-link active px-4 py-2 rounded-lg text-sm font-medium text-white bg-gradient-to-r from-lava-600 to-lava-500 shadow-md cursor-pointer">
           <i class="fas fa-chart-line mr-2"></i>Dashboard
         </a>
         <button id="btn-refresh" class="ml-2 p-2 rounded-lg text-lava-600 hover:bg-lava-50 transition-all" title="Actualizar">
