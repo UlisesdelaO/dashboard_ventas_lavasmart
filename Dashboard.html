@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Dashboard de Ventas | LavaSmart</title>
+  <base target="_top">
+
+  <!-- Google Fonts - Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            'outfit': ['Outfit', 'sans-serif'],
+          },
+          colors: {
+            'lava': {
+              50: '#f0fdfa',
+              100: '#ccfbf1',
+              200: '#99f6e4',
+              300: '#5eead4',
+              400: '#2dd4bf',
+              500: '#14b8a6',
+              600: '#0d9488',
+              700: '#0f766e',
+              800: '#115e59',
+              900: '#134e4a',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Google Charts -->
+  <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+
+  <!-- FontAwesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <style>
+    * { font-family: 'Outfit', sans-serif; }
+    body { 
+      padding-top: 4.5rem;
+      background: linear-gradient(135deg, #f0fdfa 0%, #ccfbf1 50%, #99f6e4 100%);
+      min-height: 100vh;
+    }
+    
+    .glass-card {
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+    }
+    
+    .kpi-card {
+      background: linear-gradient(135deg, rgba(255,255,255,0.9) 0%, rgba(240,253,250,0.9) 100%);
+      backdrop-filter: blur(10px);
+      transition: all 0.3s ease;
+    }
+    .kpi-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 20px 40px rgba(13, 148, 136, 0.15);
+    }
+    
+    .chart-container {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+    }
+    
+    #loader {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(240, 253, 250, 0.95);
+      backdrop-filter: blur(5px);
+      z-index: 999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #loader.hidden { display: none; }
+    
+    .nav-link {
+      position: relative;
+      overflow: hidden;
+    }
+    .nav-link::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 50%;
+      width: 0;
+      height: 2px;
+      background: #0d9488;
+      transition: all 0.3s ease;
+      transform: translateX(-50%);
+    }
+    .nav-link:hover::after,
+    .nav-link.active::after {
+      width: 80%;
+    }
+    
+    .animate-fade-in {
+      animation: fadeIn 0.6s ease-out forwards;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .pulse-dot {
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+  </style>
+
+  <!-- jQuery -->
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+  <script>
+    google.charts.load('current', {'packages':['corechart', 'bar']});
+    google.charts.setOnLoadCallback(initDashboard);
+
+    var chartsLoaded = 0;
+    var totalCharts = 4;
+
+    function initDashboard() {
+      $("#loader").removeClass("hidden");
+      chartsLoaded = 0;
+      
+      // Cargar KPIs
+      google.script.run
+        .withSuccessHandler(showKpis)
+        .withFailureHandler(handleError)
+        .getKpiData("", "", "", "all");
+      
+      // Cargar gráficas en paralelo
+      google.script.run
+        .withSuccessHandler(drawDailySalesChart)
+        .withFailureHandler(handleError)
+        .getDailySalesData();
+        
+      google.script.run
+        .withSuccessHandler(drawPaymentMethodChart)
+        .withFailureHandler(handleError)
+        .getPaymentMethodData();
+        
+      google.script.run
+        .withSuccessHandler(drawVendorChart)
+        .withFailureHandler(handleError)
+        .getVendorData();
+        
+      google.script.run
+        .withSuccessHandler(drawServiceStatusChart)
+        .withFailureHandler(handleError)
+        .getServiceStatusData();
+    }
+
+    function handleError(error) {
+      console.error('Error:', error);
+      chartsLoaded++;
+      checkAllChartsLoaded();
+      showNotification('Error al cargar datos: ' + error.message, 'error');
+    }
+
+    function checkAllChartsLoaded() {
+      if (chartsLoaded >= totalCharts) {
+        $("#loader").addClass("hidden");
+      }
+    }
+
+    function showNotification(message, type) {
+      var bgColor = type === 'error' ? 'bg-red-500' : 'bg-lava-500';
+      var notification = $('<div class="fixed top-20 right-4 ' + bgColor + ' text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-fade-in">' + message + '</div>');
+      $('body').append(notification);
+      setTimeout(function() {
+        notification.fadeOut(function() { $(this).remove(); });
+      }, 4000);
+    }
+
+    function showKpis(kpiObj) {
+      animateNumber("#kpi-total", kpiObj.totalRecords, false);
+      animateNumber("#kpi-total-revenue", kpiObj.totalRevenue, true);
+      animateNumber("#kpi-avg-revenue", kpiObj.avgRevenue, true);
+      animateNumber("#kpi-pending", kpiObj.pendingCount, false);
+    }
+
+    function animateNumber(selector, target, isCurrency) {
+      var $el = $(selector);
+      var current = 0;
+      var duration = 1000;
+      var steps = 30;
+      var increment = target / steps;
+      var interval = duration / steps;
+      
+      var timer = setInterval(function() {
+        current += increment;
+        if (current >= target) {
+          current = target;
+          clearInterval(timer);
+        }
+        if (isCurrency) {
+          $el.text(Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(current));
+        } else {
+          $el.text(Math.round(current).toLocaleString('es-MX'));
+        }
+      }, interval);
+    }
+
+    function drawDailySalesChart(dataArray) {
+      if (!dataArray || dataArray.length <= 1) {
+        chartsLoaded++;
+        checkAllChartsLoaded();
+        return;
+      }
+      
+      var dataTable = google.visualization.arrayToDataTable(dataArray);
+      var options = {
+        title: '',
+        curveType: 'function',
+        legend: { position: 'none' },
+        hAxis: {
+          title: '',
+          textStyle: { fontSize: 11, color: '#0f766e', fontName: 'Outfit' },
+          slantedText: true,
+          slantedTextAngle: 45
+        },
+        vAxis: {
+          title: '',
+          format: '$#,###',
+          textStyle: { fontSize: 11, color: '#0f766e', fontName: 'Outfit' },
+          gridlines: { color: '#e5e7eb', count: 5 }
+        },
+        chartArea: { left: 80, top: 20, width: '85%', height: '70%' },
+        colors: ['#0d9488'],
+        backgroundColor: 'transparent',
+        lineWidth: 3,
+        pointSize: 4,
+        pointShape: 'circle',
+        animation: { startup: true, duration: 1000, easing: 'out' }
+      };
+      var chart = new google.visualization.LineChart(document.getElementById('chart_daily'));
+      chart.draw(dataTable, options);
+      chartsLoaded++;
+      checkAllChartsLoaded();
+    }
+
+    function drawPaymentMethodChart(dataArray) {
+      if (!dataArray || dataArray.length <= 1) {
+        chartsLoaded++;
+        checkAllChartsLoaded();
+        return;
+      }
+      
+      var dataTable = google.visualization.arrayToDataTable(dataArray);
+      var options = {
+        title: '',
+        pieHole: 0.45,
+        legend: { position: 'right', textStyle: { fontSize: 12, fontName: 'Outfit', color: '#0f766e' } },
+        chartArea: { left: 20, top: 20, width: '90%', height: '85%' },
+        colors: ['#0d9488', '#14b8a6', '#2dd4bf', '#5eead4', '#99f6e4', '#ccfbf1'],
+        backgroundColor: 'transparent',
+        pieSliceTextStyle: { color: 'white', fontSize: 11, fontName: 'Outfit' },
+        animation: { startup: true, duration: 1000, easing: 'out' }
+      };
+      var chart = new google.visualization.PieChart(document.getElementById('chart_payment'));
+      chart.draw(dataTable, options);
+      chartsLoaded++;
+      checkAllChartsLoaded();
+    }
+
+    function drawVendorChart(dataArray) {
+      if (!dataArray || dataArray.length <= 1) {
+        chartsLoaded++;
+        checkAllChartsLoaded();
+        return;
+      }
+      
+      var dataTable = google.visualization.arrayToDataTable(dataArray);
+      var options = {
+        title: '',
+        legend: { position: 'none' },
+        hAxis: {
+          textStyle: { fontSize: 11, color: '#0f766e', fontName: 'Outfit' },
+          format: '$#,###'
+        },
+        vAxis: {
+          textStyle: { fontSize: 11, color: '#0f766e', fontName: 'Outfit' }
+        },
+        chartArea: { left: 100, top: 20, width: '75%', height: '80%' },
+        colors: ['#14b8a6'],
+        backgroundColor: 'transparent',
+        bar: { groupWidth: '70%' },
+        animation: { startup: true, duration: 1000, easing: 'out' }
+      };
+      var chart = new google.visualization.BarChart(document.getElementById('chart_vendor'));
+      chart.draw(dataTable, options);
+      chartsLoaded++;
+      checkAllChartsLoaded();
+    }
+
+    function drawServiceStatusChart(dataArray) {
+      if (!dataArray || dataArray.length <= 1) {
+        chartsLoaded++;
+        checkAllChartsLoaded();
+        return;
+      }
+      
+      var dataTable = google.visualization.arrayToDataTable(dataArray);
+      var options = {
+        title: '',
+        pieHole: 0,
+        legend: { position: 'right', textStyle: { fontSize: 12, fontName: 'Outfit', color: '#0f766e' } },
+        chartArea: { left: 20, top: 20, width: '90%', height: '85%' },
+        colors: ['#059669', '#f59e0b', '#ef4444', '#6366f1', '#8b5cf6'],
+        backgroundColor: 'transparent',
+        pieSliceTextStyle: { color: 'white', fontSize: 11, fontName: 'Outfit' },
+        animation: { startup: true, duration: 1000, easing: 'out' }
+      };
+      var chart = new google.visualization.PieChart(document.getElementById('chart_status'));
+      chart.draw(dataTable, options);
+      chartsLoaded++;
+      checkAllChartsLoaded();
+    }
+
+    $(window).resize(function() {
+      if (typeof google !== 'undefined' && google.visualization) {
+        initDashboard();
+      }
+    });
+
+    $(document).ready(function() {
+      // Refresh button
+      $("#btn-refresh").on("click", function() {
+        initDashboard();
+        showNotification('Datos actualizados', 'success');
+      });
+    });
+  </script>
+</head>
+
+<body class="min-h-screen">
+  <!-- Navbar -->
+  <nav class="fixed top-0 left-0 w-full glass-card z-50 shadow-lg">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
+      <!-- Logo -->
+      <a href="?" class="flex items-center gap-3 group">
+        <div class="w-10 h-10 bg-gradient-to-br from-lava-500 to-lava-700 rounded-xl flex items-center justify-center shadow-lg group-hover:shadow-lava-500/30 transition-all">
+          <i class="fas fa-tint text-white text-lg"></i>
+        </div>
+        <span class="text-xl font-bold bg-gradient-to-r from-lava-700 to-lava-500 bg-clip-text text-transparent">
+          LavaSmart
+        </span>
+      </a>
+      
+      <!-- Nav Links -->
+      <div class="flex items-center gap-2">
+        <a href="?"
+           class="nav-link px-4 py-2 rounded-lg text-sm font-medium text-lava-700 hover:bg-lava-50 transition-all">
+          <i class="fas fa-table mr-2"></i>Consulta
+        </a>
+        <a href="?page=dashboard"
+           class="nav-link active px-4 py-2 rounded-lg text-sm font-medium text-white bg-gradient-to-r from-lava-600 to-lava-500 shadow-md">
+          <i class="fas fa-chart-line mr-2"></i>Dashboard
+        </a>
+        <button id="btn-refresh" class="ml-2 p-2 rounded-lg text-lava-600 hover:bg-lava-50 transition-all" title="Actualizar">
+          <i class="fas fa-sync-alt"></i>
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <div class="max-w-7xl mx-auto px-4 py-6">
+    <!-- Header -->
+    <div class="mb-8 animate-fade-in">
+      <h1 class="text-3xl md:text-4xl font-bold text-lava-800 mb-2">
+        Dashboard de Ventas
+      </h1>
+      <p class="text-lava-600 flex items-center gap-2">
+        <span class="w-2 h-2 bg-green-500 rounded-full pulse-dot"></span>
+        Datos en tiempo real
+      </p>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+      <div class="kpi-card rounded-2xl shadow-lg p-5 animate-fade-in" style="animation-delay: 0.1s">
+        <div class="flex items-center justify-between mb-3">
+          <span class="text-lava-600 text-sm font-medium">Total Registros</span>
+          <div class="w-10 h-10 bg-lava-100 rounded-xl flex items-center justify-center">
+            <i class="fas fa-clipboard-list text-lava-600"></i>
+          </div>
+        </div>
+        <span id="kpi-total" class="text-3xl font-bold text-lava-800">0</span>
+      </div>
+      
+      <div class="kpi-card rounded-2xl shadow-lg p-5 animate-fade-in" style="animation-delay: 0.2s">
+        <div class="flex items-center justify-between mb-3">
+          <span class="text-lava-600 text-sm font-medium">Ingreso Total</span>
+          <div class="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center">
+            <i class="fas fa-dollar-sign text-emerald-600"></i>
+          </div>
+        </div>
+        <span id="kpi-total-revenue" class="text-3xl font-bold text-lava-800">$0.00</span>
+      </div>
+      
+      <div class="kpi-card rounded-2xl shadow-lg p-5 animate-fade-in" style="animation-delay: 0.3s">
+        <div class="flex items-center justify-between mb-3">
+          <span class="text-lava-600 text-sm font-medium">Ingreso Promedio</span>
+          <div class="w-10 h-10 bg-cyan-100 rounded-xl flex items-center justify-center">
+            <i class="fas fa-chart-bar text-cyan-600"></i>
+          </div>
+        </div>
+        <span id="kpi-avg-revenue" class="text-3xl font-bold text-lava-800">$0.00</span>
+      </div>
+      
+      <div class="kpi-card rounded-2xl shadow-lg p-5 animate-fade-in" style="animation-delay: 0.4s">
+        <div class="flex items-center justify-between mb-3">
+          <span class="text-lava-600 text-sm font-medium">Servicios Pendientes</span>
+          <div class="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center">
+            <i class="fas fa-clock text-amber-600"></i>
+          </div>
+        </div>
+        <span id="kpi-pending" class="text-3xl font-bold text-lava-800">0</span>
+      </div>
+    </div>
+
+    <!-- Charts Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+      <!-- Daily Sales Chart -->
+      <div class="chart-container rounded-2xl shadow-lg p-5 animate-fade-in lg:col-span-2" style="animation-delay: 0.5s">
+        <h3 class="text-lg font-semibold text-lava-800 mb-4 flex items-center gap-2">
+          <i class="fas fa-chart-line text-lava-500"></i>
+          Ventas Diarias
+        </h3>
+        <div id="chart_daily" class="w-full h-[350px]"></div>
+      </div>
+      
+      <!-- Payment Method Chart -->
+      <div class="chart-container rounded-2xl shadow-lg p-5 animate-fade-in" style="animation-delay: 0.6s">
+        <h3 class="text-lg font-semibold text-lava-800 mb-4 flex items-center gap-2">
+          <i class="fas fa-credit-card text-lava-500"></i>
+          Métodos de Pago
+        </h3>
+        <div id="chart_payment" class="w-full h-[300px]"></div>
+      </div>
+      
+      <!-- Service Status Chart -->
+      <div class="chart-container rounded-2xl shadow-lg p-5 animate-fade-in" style="animation-delay: 0.7s">
+        <h3 class="text-lg font-semibold text-lava-800 mb-4 flex items-center gap-2">
+          <i class="fas fa-tasks text-lava-500"></i>
+          Estado de Servicios
+        </h3>
+        <div id="chart_status" class="w-full h-[300px]"></div>
+      </div>
+      
+      <!-- Vendor Chart -->
+      <div class="chart-container rounded-2xl shadow-lg p-5 animate-fade-in lg:col-span-2" style="animation-delay: 0.8s">
+        <h3 class="text-lg font-semibold text-lava-800 mb-4 flex items-center gap-2">
+          <i class="fas fa-users text-lava-500"></i>
+          Ventas por Vendedor
+        </h3>
+        <div id="chart_vendor" class="w-full h-[300px]"></div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="text-center text-lava-500 text-sm py-4">
+      <p>LavaSmart Dashboard &copy; 2025</p>
+    </div>
+  </div>
+
+  <!-- Loader -->
+  <div id="loader">
+    <div class="flex flex-col items-center">
+      <div class="relative">
+        <div class="w-16 h-16 border-4 border-lava-200 rounded-full"></div>
+        <div class="w-16 h-16 border-4 border-lava-500 rounded-full border-t-transparent animate-spin absolute top-0 left-0"></div>
+      </div>
+      <span class="text-lava-600 font-medium text-lg mt-4">Cargando dashboard...</span>
+    </div>
+  </div>
+</body>
+</html>
