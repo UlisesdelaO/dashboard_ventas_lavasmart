@@ -339,27 +339,24 @@
       }
     });
 
-    // Función para navegar usando google.script.history (API oficial de Apps Script)
-    // Documentación: https://developers.google.com/apps-script/guides/web
+    // Función para navegar obteniendo la URL del servidor
+    // Esto funciona en modo de prueba y producción
     function navigateToPage(page) {
-      try {
-        // Usar google.script.history para cambiar los parámetros de la URL
-        if (typeof google !== 'undefined' && google.script && google.script.history) {
-          var stateObj = { page: page || 'index' };
-          var paramObj = page === 'dashboard' ? { page: 'dashboard' } : {};
-          // replace cambia la URL sin agregar al historial
-          google.script.history.replace(stateObj, paramObj, '');
-          // Recargar para que doGet sirva la página correcta
-          location.reload();
-        } else {
-          // Fallback si google.script no está disponible
-          location.href = page === 'dashboard' ? '?page=dashboard' : '?';
-        }
-      } catch (e) {
-        console.error('Error navegando:', e);
-        // Último fallback
-        location.href = page === 'dashboard' ? '?page=dashboard' : '?';
-      }
+      // Obtener la URL base del script desde el servidor
+      google.script.run
+        .withSuccessHandler(function(baseUrl) {
+          // Construir URL con parámetros
+          var url = page === 'dashboard' ? baseUrl + '?page=dashboard' : baseUrl;
+          // Abrir en ventana principal (salir del iframe)
+          window.open(url, '_top');
+        })
+        .withFailureHandler(function(error) {
+          console.error('Error obteniendo URL:', error);
+          // Fallback: intentar con URL relativa
+          var url = page === 'dashboard' ? '?page=dashboard' : '?';
+          window.open(url, '_top');
+        })
+        .getScriptUrl();
     }
 
     $(document).ready(function() {

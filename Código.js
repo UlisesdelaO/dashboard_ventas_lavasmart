@@ -34,6 +34,14 @@ function doGet(e) {
 }
 
 /**
+ * Obtiene la URL base del script para navegación
+ * Esta función es necesaria para navegación en modo de prueba
+ */
+function getScriptUrl() {
+  return ScriptApp.getService().getUrl();
+}
+
+/**
  * Formatea fecha a "DD/MM/AAAA" usando la zona horaria correcta
  */
 function formatDate(dateValue) {
