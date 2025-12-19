@@ -339,13 +339,23 @@
       }
     });
 
-    // Función para navegar en iframe
+    // Función para navegar en iframe usando replace para evitar pantalla en blanco
     function navigateToPage(page) {
-      var baseUrl = window.location.protocol + '//' + window.location.host + window.location.pathname;
-      if (page === 'dashboard') {
-        window.location.href = baseUrl + '?page=dashboard';
-      } else {
-        window.location.href = baseUrl;
+      try {
+        var currentUrl = window.location.href;
+        var baseUrl = currentUrl.split('?')[0]; // Obtener URL sin parámetros
+        var newUrl = page === 'dashboard' ? baseUrl + '?page=dashboard' : baseUrl;
+        
+        // Usar replace en lugar de href para evitar problemas en iframe
+        window.location.replace(newUrl);
+      } catch (e) {
+        console.error('Error en navegación:', e);
+        // Fallback: recargar con parámetros
+        if (page === 'dashboard') {
+          window.location.search = '?page=dashboard';
+        } else {
+          window.location.search = '';
+        }
       }
     }
 
