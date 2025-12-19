@@ -339,34 +339,27 @@
       }
     });
 
-    // Función para navegar en iframe - maneja tanto iframe como ventana normal
+    // Función para navegar usando google.script.url (API oficial de Apps Script)
+    // Documentación: https://developers.google.com/apps-script/guides/web
     function navigateToPage(page) {
-      try {
-        // Detectar si estamos en un iframe
-        var isInIframe = window.self !== window.top;
-        var targetWindow = isInIframe ? window.top : window;
-        
-        // Obtener URL base
-        var currentUrl = targetWindow.location.href;
-        var baseUrl = currentUrl.split('?')[0];
-        var newUrl = page === 'dashboard' ? baseUrl + '?page=dashboard' : baseUrl;
-        
-        // Usar replace para evitar problemas en iframe
-        targetWindow.location.replace(newUrl);
-      } catch (e) {
-        console.error('Error en navegación:', e);
-        // Fallback: intentar con window.location directamente
-        try {
-          if (page === 'dashboard') {
-            window.location.search = '?page=dashboard';
-          } else {
-            window.location.search = '';
+      // Usar google.script.url.getLocation para obtener la URL actual
+      // y luego modificar los parámetros
+      if (typeof google !== 'undefined' && google.script && google.script.url) {
+        google.script.url.getLocation(function(location) {
+          // Construir nueva URL con el parámetro page
+          var params = page === 'dashboard' ? '?page=dashboard' : '';
+          // Usar google.script.history para cambiar la URL sin recargar
+          if (google.script.history) {
+            var stateObj = { page: page || 'index' };
+            var paramObj = page === 'dashboard' ? { page: 'dashboard' } : {};
+            google.script.history.replace(stateObj, paramObj, '');
           }
-        } catch (e2) {
-          console.error('Error en fallback:', e2);
-          // Último recurso: recargar página completa
+          // Forzar recarga para que doGet sirva la página correcta
           window.location.reload();
-        }
+        });
+      } else {
+        // Fallback: usar URL relativa simple
+        window.location.href = page === 'dashboard' ? '?page=dashboard' : '?';
       }
     }
 
