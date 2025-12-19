@@ -339,27 +339,26 @@
       }
     });
 
-    // Función para navegar usando google.script.url (API oficial de Apps Script)
+    // Función para navegar usando google.script.history (API oficial de Apps Script)
     // Documentación: https://developers.google.com/apps-script/guides/web
     function navigateToPage(page) {
-      // Usar google.script.url.getLocation para obtener la URL actual
-      // y luego modificar los parámetros
-      if (typeof google !== 'undefined' && google.script && google.script.url) {
-        google.script.url.getLocation(function(location) {
-          // Construir nueva URL con el parámetro page
-          var params = page === 'dashboard' ? '?page=dashboard' : '';
-          // Usar google.script.history para cambiar la URL sin recargar
-          if (google.script.history) {
-            var stateObj = { page: page || 'index' };
-            var paramObj = page === 'dashboard' ? { page: 'dashboard' } : {};
-            google.script.history.replace(stateObj, paramObj, '');
-          }
-          // Forzar recarga para que doGet sirva la página correcta
-          window.location.reload();
-        });
-      } else {
-        // Fallback: usar URL relativa simple
-        window.location.href = page === 'dashboard' ? '?page=dashboard' : '?';
+      try {
+        // Usar google.script.history para cambiar los parámetros de la URL
+        if (typeof google !== 'undefined' && google.script && google.script.history) {
+          var stateObj = { page: page || 'index' };
+          var paramObj = page === 'dashboard' ? { page: 'dashboard' } : {};
+          // replace cambia la URL sin agregar al historial
+          google.script.history.replace(stateObj, paramObj, '');
+          // Recargar para que doGet sirva la página correcta
+          location.reload();
+        } else {
+          // Fallback si google.script no está disponible
+          location.href = page === 'dashboard' ? '?page=dashboard' : '?';
+        }
+      } catch (e) {
+        console.error('Error navegando:', e);
+        // Último fallback
+        location.href = page === 'dashboard' ? '?page=dashboard' : '?';
       }
     }
 
@@ -378,26 +377,26 @@
   <nav class="fixed top-0 left-0 w-full glass-card z-50 shadow-lg">
     <div class="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
       <!-- Logo -->
-      <a href="javascript:void(0)" onclick="navigateToPage('')" class="flex items-center gap-3 group cursor-pointer">
+      <button type="button" onclick="navigateToPage('')" class="flex items-center gap-3 group cursor-pointer bg-transparent border-none">
         <div class="w-10 h-10 bg-gradient-to-br from-lava-500 to-lava-700 rounded-xl flex items-center justify-center shadow-lg group-hover:shadow-lava-500/30 transition-all">
           <i class="fas fa-tint text-white text-lg"></i>
         </div>
         <span class="text-xl font-bold bg-gradient-to-r from-lava-700 to-lava-500 bg-clip-text text-transparent">
           LavaSmart
         </span>
-      </a>
+      </button>
       
       <!-- Nav Links -->
       <div class="flex items-center gap-2">
-        <a href="javascript:void(0)" onclick="navigateToPage('')"
-           class="nav-link px-4 py-2 rounded-lg text-sm font-medium text-lava-700 hover:bg-lava-50 transition-all cursor-pointer">
+        <button type="button" onclick="navigateToPage('')"
+           class="nav-link px-4 py-2 rounded-lg text-sm font-medium text-lava-700 hover:bg-lava-50 transition-all cursor-pointer bg-transparent border-none">
           <i class="fas fa-table mr-2"></i>Consulta
-        </a>
-        <a href="javascript:void(0)" onclick="navigateToPage('dashboard')"
-           class="nav-link active px-4 py-2 rounded-lg text-sm font-medium text-white bg-gradient-to-r from-lava-600 to-lava-500 shadow-md cursor-pointer">
+        </button>
+        <button type="button" onclick="navigateToPage('dashboard')"
+           class="nav-link active px-4 py-2 rounded-lg text-sm font-medium text-white bg-gradient-to-r from-lava-600 to-lava-500 shadow-md cursor-pointer border-none">
           <i class="fas fa-chart-line mr-2"></i>Dashboard
-        </a>
-        <button id="btn-refresh" class="ml-2 p-2 rounded-lg text-lava-600 hover:bg-lava-50 transition-all" title="Actualizar">
+        </button>
+        <button id="btn-refresh" type="button" class="ml-2 p-2 rounded-lg text-lava-600 hover:bg-lava-50 transition-all" title="Actualizar">
           <i class="fas fa-sync-alt"></i>
         </button>
       </div>
